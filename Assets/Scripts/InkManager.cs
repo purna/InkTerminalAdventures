@@ -23,12 +23,26 @@ public class InkManager : MonoBehaviour
 {
     [SerializeField] bool _debugMode;
 
-    [SerializeField] private TextAsset _inkJsonAsset;
+
+    [Header("Ink JSON Asset")]
+    /// <summary>
+    /// The JSON file containing the Ink story
+    /// </summary>
+    /// <remarks>
+    /// This file should be placed in the "StreamingAssets" folder however you can't access files in the "StreamingAssets"
+    /// folder in the Unity Editor, so you need to place the file in the "Resources" folder of the built game.
+    /// You can also use the "ImportStoryFile" method to load the file from a different location.
+    /// </remarks>
+    [Tooltip("The JSON file containing the Ink story, placed in the \"Resources\" folder")]
+    [SerializeField] private TextAsset _inkJsonAsset = null;
+
     public TextAsset InkJsonAsset { get => _inkJsonAsset; set => _inkJsonAsset = value; }
 
     private Story _story;
     public Story Story { get => _story; set => _story = value; }
     bool _storyLoaded = false;
+
+    bool _remoteFile = false;
 
     List<ChoiceButton> _allChoiceButtons = new List<ChoiceButton>();
     List<UILabel> _allUIText = new List<UILabel>();
@@ -136,32 +150,40 @@ public class InkManager : MonoBehaviour
     }
 
     IEnumerator ImportStoryFile()
+{
+    string path = System.IO.Path.Combine(Application.streamingAssetsPath, "story.json");
+    string uri = path;
+
+#if UNITY_EDITOR || UNITY_STANDALONE || UNITY_MACOS
+    uri = "file://" + path;
+#endif
+
+    DebugConsoleLog($"--- InkManager: Loading \"{uri}\"");
+
+    using (UnityWebRequest www = UnityWebRequest.Get(uri))
     {
-        string path = System.IO.Path.Combine(Application.streamingAssetsPath + "/" + "story.json");
-        
-        using (UnityWebRequest www = UnityWebRequest.Get(path))
+        yield return www.SendWebRequest();
+
+        if (www.result == UnityWebRequest.Result.ProtocolError || www.result == UnityWebRequest.Result.ConnectionError)
         {
-            yield return www.SendWebRequest();
+            Debug.Log(www.error);
 
-            if (www.result == UnityWebRequest.Result.ProtocolError || www.result == UnityWebRequest.Result.ConnectionError)
-            {
-                Debug.Log(www.error);
+            _firstChoice.TurnOff();
+            _secondChoice.TurnOff();
 
-                _firstChoice.TurnOff();
-                _secondChoice.TurnOff();
-
-                _titleLabel.UpdateLabel("ERROR");
-                _eventText.text = "No \"story.json\" file found in the StreamingAssets folder!";
-            }
-            else
-            {
-                StreamReader sr = new StreamReader(path);
-                _inkJsonAsset = new TextAsset(sr.ReadToEnd());
-                StartStory();
-                _storyLoaded = true;
-            }
+            _titleLabel.UpdateLabel("ERROR");
+            _eventText.text = "No \"story.json\" file found in the StreamingAssets folder!";
+        }
+        else
+        {
+            _inkJsonAsset = new TextAsset(www.downloadHandler.text);
+            StartStory();
+            _storyLoaded = true;
         }
     }
+}
+
+
 
     /// <summary>
     /// Starts the Story, once loaded
@@ -507,7 +529,7 @@ public class InkManager : MonoBehaviour
     /// Prints Debug.Log messages only if "Debug Mode" is active
     /// </summary>
     /// <param name="message"></param>
-    void DebugConsoleLog(string message)
+    private void DebugConsoleLog(string message)
     {
         if (!_debugMode) return;
         Debug.Log(message);
