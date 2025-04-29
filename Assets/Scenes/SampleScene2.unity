@@ -254,7 +254,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _debugMode: 0
   _inkJsonAsset: {fileID: 0}
-  _inkJsonAssetFileName: story.json
+  _inkJsonAssetFileName: dr_green.json
   _firstChoice: {fileID: 2007010497}
   _secondChoice: {fileID: 1150444906}
   _titleLabel: {fileID: 2031537904}
@@ -263,19 +263,7 @@ MonoBehaviour:
     InkVariableName: jumps
     Prefix: Jumps performed
     UILabel: {fileID: 1878848677}
-  _allResourceVariables:
-  - InkVariableName: fuel
-    Prefix: FUEL
-    UILabel: {fileID: 730757979}
-  - InkVariableName: food
-    Prefix: FOOD
-    UILabel: {fileID: 207278568}
-  - InkVariableName: morale
-    Prefix: MORALE
-    UILabel: {fileID: 494229992}
-  - InkVariableName: status
-    Prefix: STATUS
-    UILabel: {fileID: 1301303488}
+  _allResourceVariables: []
   _postProcessingVolume: {fileID: 633310943}
   _aberration: {fileID: 0}
 --- !u!4 &264599068

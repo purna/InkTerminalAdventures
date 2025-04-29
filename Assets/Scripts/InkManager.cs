@@ -38,6 +38,9 @@ public class InkManager : MonoBehaviour
 
     public TextAsset InkJsonAsset { get => _inkJsonAsset; set => _inkJsonAsset = value; }
 
+    public string _inkJsonAssetFileName;
+ 
+
     private Story _story;
     public Story Story { get => _story; set => _story = value; }
     bool _storyLoaded = false;
@@ -151,7 +154,7 @@ public class InkManager : MonoBehaviour
 
     IEnumerator ImportStoryFile()
 {
-    string path = System.IO.Path.Combine(Application.streamingAssetsPath, "story.json");
+    string path = System.IO.Path.Combine(Application.streamingAssetsPath, _inkJsonAssetFileName);
     string uri = path;
 
 #if UNITY_EDITOR || UNITY_STANDALONE || UNITY_MACOS
