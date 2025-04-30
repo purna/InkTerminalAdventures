@@ -42,6 +42,7 @@ public class InkManager : MonoBehaviour
  
 
     private Story _story;
+
     public Story Story { get => _story; set => _story = value; }
     bool _storyLoaded = false;
 
@@ -53,8 +54,29 @@ public class InkManager : MonoBehaviour
     [Header("UI")]    
     [SerializeField] ChoiceButton _firstChoice;
     [SerializeField] ChoiceButton _secondChoice;
+    [SerializeField] ChoiceButton _thirdChoice;
+
+    [SerializeField] private TextMeshProUGUI displayNameText;
+
+    [SerializeField] private GameObject dialoguePanel;
+
+    [SerializeField] private Animator portraitAnimator;
+     private Animator layoutAnimator;
     
     [SerializeField] UILabel _titleLabel;
+
+    [Header("Audio")]
+    [SerializeField] private DialogueAudioInfoSO defaultAudioInfo;
+    [SerializeField] private DialogueAudioInfoSO[] audioInfos;
+    [SerializeField] private bool makePredictable;
+    private DialogueAudioInfoSO currentAudioInfo;
+    private Dictionary<string, DialogueAudioInfoSO> audioInfoDictionary;
+    private AudioSource audioSource;
+
+    private const string SPEAKER_TAG = "speaker";
+    private const string PORTRAIT_TAG = "portrait";
+    private const string LAYOUT_TAG = "layout";
+    private const string AUDIO_TAG = "audio";
     
     [SerializeField] TextMeshProUGUI _eventText;
 
@@ -72,6 +94,9 @@ public class InkManager : MonoBehaviour
     float _stepGlitch = .1f;
     
     string _defaultHexColor = "#FFCC00";
+
+
+
 
     // Stringbuilder used to manipulate and parse text to be displayed
     StringBuilder _sb;
@@ -125,7 +150,8 @@ public class InkManager : MonoBehaviour
         _allChoiceButtons = new List<ChoiceButton>()
         {
             _firstChoice,
-            _secondChoice
+            _secondChoice,
+            _thirdChoice
         };
 
         _allUIText = new List<UILabel>()
@@ -144,6 +170,13 @@ public class InkManager : MonoBehaviour
         }
 
         _storyLoaded = false;
+
+        InitializeAudioInfoDictionary();
+
+        dialoguePanel.SetActive(false);
+
+        // get the layout animator
+        layoutAnimator = dialoguePanel.GetComponent<Animator>();
         
         // Reset effects
         _keepGlitching = false;
@@ -173,6 +206,7 @@ public class InkManager : MonoBehaviour
 
             _firstChoice.TurnOff();
             _secondChoice.TurnOff();
+            _thirdChoice.TurnOff();
 
             _titleLabel.UpdateLabel("ERROR");
             _eventText.text = "No \"story.json\" file found in the StreamingAssets folder!";
@@ -194,6 +228,12 @@ public class InkManager : MonoBehaviour
     public void StartStory()
     {
         _story = new Story(_inkJsonAsset.text);
+
+         // reset portrait, layout, and speaker
+        displayNameText.text = "???";
+        portraitAnimator.Play("default");
+        layoutAnimator.Play("right");
+
 
         RemoveVariableObservers();
         AddVariableObservers();
@@ -236,12 +276,16 @@ public class InkManager : MonoBehaviour
         ClearUI();
         _sb = new StringBuilder();
 
+        
+
         // Gets the next line
         while (_story.canContinue) _sb.Append(_story.Continue());
 
         // Parses possible commands
         DebugConsoleLog($"TO PARSE: {_sb}");
         _sb = new StringBuilder(ParseCommand(_sb.ToString()));
+
+        
 
         // Removes whitespace
         _sb = new StringBuilder($"{_sb?.ToString().Trim()}");
@@ -251,6 +295,14 @@ public class InkManager : MonoBehaviour
         // Display content until a choice or the end is reached
         if (!_story.canContinue)
         {
+            dialoguePanel.SetActive(true);
+
+            // handle tags
+
+            DebugConsoleLog($"--- InkManager: {_story.currentTags.Count} tags available!");
+            DebugConsoleLog($"--- InkManager: {_story.currentTags}");
+            HandleTags(_story.currentTags);
+
             // If choices are available, display them
             // otherwise just turn off the choice buttons
             if (AreChoicesAvailable()) ShowChoices();
@@ -268,7 +320,7 @@ public class InkManager : MonoBehaviour
     /// </summary>
     public void ShowChoices()
     {
-        if (_story.currentChoices.Count > 2 || _story.currentChoices.Count <= 0)
+        if (_story.currentChoices.Count > 3 || _story.currentChoices.Count <= 0)
             Debug.LogError($"--- InkManager: wrong number of choices! ({_story.currentChoices.Count})");
         
         for (int i = 0; i < _story.currentChoices.Count; i++)
@@ -283,19 +335,39 @@ public class InkManager : MonoBehaviour
                 _allChoiceButtons[i].UpdateChoiceText($"> {text}");
         }
 
+        // Updates the choice buttons with the correct text
+        DebugConsoleLog($"--- InkManager: {_story.currentChoices.Count} choices available!");
+
         switch (_story.currentChoices.Count)
         {
+            case 0:     
+                break;
+
             case 1:
                 _secondChoice.ChoiceIndex = 0;
                 _secondChoice.TurnOn();
                 break;
             
             case 2:
-                _firstChoice.ChoiceIndex = 0;
                 _secondChoice.ChoiceIndex = 1;
+                _firstChoice.ChoiceIndex = 0;
+
+                _secondChoice.TurnOn();
+                _firstChoice.TurnOn();
+                break;
+
+            case 3:
+                _thirdChoice.ChoiceIndex = 0;
+                _secondChoice.ChoiceIndex = 1;
+                _firstChoice.ChoiceIndex = 2;
 
                 _firstChoice.TurnOn();
                 _secondChoice.TurnOn();
+                _thirdChoice.TurnOn();
+                break;
+                
+            default:
+                Debug.LogError($"--- InkManager: wrong number of choices! ({_story.currentChoices.Count})");
                 break;
         }
 
@@ -375,6 +447,8 @@ public class InkManager : MonoBehaviour
         _eventText.text = string.Empty;
         _allChoiceButtons.ForEach(x => x.TurnOff());
         RefreshResourcesLabels();
+
+        SetCurrentAudioInfo(defaultAudioInfo.id);
     }
 
     /// <summary>
@@ -549,6 +623,7 @@ public class InkManager : MonoBehaviour
         // other keypresses
         if (!_storyLoaded) return;
 
+
         switch (_story.currentChoices.Count)
         {
             case 1:
@@ -559,6 +634,77 @@ public class InkManager : MonoBehaviour
                 if (Input.GetKeyDown(KeyCode.Alpha1)) SelectChoice(0);
                 if (Input.GetKeyDown(KeyCode.Alpha2)) SelectChoice(1);
                 break;
+
+             case 3:
+                if (Input.GetKeyDown(KeyCode.Alpha1)) SelectChoice(0);
+                if (Input.GetKeyDown(KeyCode.Alpha2)) SelectChoice(1);
+                if (Input.GetKeyDown(KeyCode.Alpha3)) SelectChoice(2);
+                break;
         }
     }
+
+
+       private void HandleTags(List<string> currentTags)
+    {
+        // loop through each tag and handle it accordingly
+        foreach (string tag in currentTags) 
+        {
+            // parse the tag
+            string[] splitTag = tag.Split(':');
+            if (splitTag.Length != 2) 
+            {
+                Debug.LogError("Tag could not be appropriately parsed: " + tag);
+            }
+            string tagKey = splitTag[0].Trim();
+            string tagValue = splitTag[1].Trim();
+            
+            // handle the tag
+            switch (tagKey) 
+            {
+                case SPEAKER_TAG:
+                    displayNameText.text = tagValue;
+                    break;
+                case PORTRAIT_TAG:
+                    portraitAnimator.Play(tagValue);
+                    break;
+                case LAYOUT_TAG:
+                    layoutAnimator.Play(tagValue);
+                    break;
+                case AUDIO_TAG: 
+                    SetCurrentAudioInfo(tagValue);
+                    break;
+                default:
+                    Debug.LogWarning("Tag came in but is not currently being handled: " + tag);
+                    break;
+            }
+        }
+    }
+
+
+
+
+        private void InitializeAudioInfoDictionary() 
+    {
+        audioInfoDictionary = new Dictionary<string, DialogueAudioInfoSO>();
+        audioInfoDictionary.Add(defaultAudioInfo.id, defaultAudioInfo);
+        foreach (DialogueAudioInfoSO audioInfo in audioInfos) 
+        {
+            audioInfoDictionary.Add(audioInfo.id, audioInfo);
+        }
+    }
+
+        private void SetCurrentAudioInfo(string id) 
+    {
+        DialogueAudioInfoSO audioInfo = null;
+        audioInfoDictionary.TryGetValue(id, out audioInfo);
+        if (audioInfo != null) 
+        {
+            this.currentAudioInfo = audioInfo;
+        }
+        else 
+        {
+            Debug.LogWarning("Failed to find audio info for id: " + id);
+        }
+    }
+
 }

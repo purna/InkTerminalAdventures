@@ -7,4 +7,3 @@
 VAR jumps = 0
 VAR pokemon_name = ""
 
-EXTERNAL playEmote(emoteName)
